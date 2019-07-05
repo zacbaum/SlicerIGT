@@ -18,6 +18,7 @@
 
 ==============================================================================*/
 
+#include "vtkSlicerVersionConfigure.h" // For Slicer_VERSION_MAJOR,Slicer_VERSION_MINOR 
 
 // FiducialRegistrationWizard includes
 #include "vtkSlicerFiducialRegistrationWizardLogic.h"
@@ -213,6 +214,8 @@ bool vtkSlicerFiducialRegistrationWizardLogic::UpdateCalibration(vtkMRMLNode* no
     return false;
   }
 
+  fiducialRegistrationWizardNode->SetCalibrationError( VTK_DOUBLE_MAX );
+
   vtkMRMLMarkupsFiducialNode* fromMarkupsFiducialNode = fiducialRegistrationWizardNode->GetFromFiducialListNode();
   if (fromMarkupsFiducialNode == NULL)
   {
@@ -286,7 +289,7 @@ bool vtkSlicerFiducialRegistrationWizardLogic::UpdateCalibration(vtkMRMLNode* no
         << " registration is being used." << std::endl << "Unexpected results may occur.";
       fiducialRegistrationWizardNode->AddToCalibrationStatusMessage(msg.str());
     }
-    const int MAX_NUMBER_OF_POINTS_FOR_POINT_MATCHING_AUTOMATIC = 8; // more than this and it tends to take a long time. Algorithm is at least N!
+    const int MAX_NUMBER_OF_POINTS_FOR_POINT_MATCHING_AUTOMATIC = 30; // more than this and it tends to take a long time. Algorithm is at least N!
     int fromNumberOfPoints = fromPointsUnordered->GetNumberOfPoints();
     int toNumberOfPoints = toPointsUnordered->GetNumberOfPoints();
     int numberOfPointsToMatch = std::max(fromNumberOfPoints, toNumberOfPoints);
@@ -300,18 +303,18 @@ bool vtkSlicerFiducialRegistrationWizardLogic::UpdateCalibration(vtkMRMLNode* no
       return false;
     }
     vtkSmartPointer< vtkPointMatcher > pointMatcher = vtkSmartPointer< vtkPointMatcher >::New();
-    pointMatcher->SetInputPointList1(fromPointsUnordered);
-    pointMatcher->SetInputPointList2(toPointsUnordered);
+    pointMatcher->SetInputSourcePoints(fromPointsUnordered);
+    pointMatcher->SetInputTargetPoints(toPointsUnordered);
     pointMatcher->SetMaximumDifferenceInNumberOfPoints(2);
-    pointMatcher->SetTolerableRootMeanSquareDistanceErrorMm(10.0);
-    pointMatcher->SetAmbiguityThresholdDistanceMm(5.0);
+    pointMatcher->SetTolerableDistanceErrorMultiple(0.05);
+    pointMatcher->SetAmbiguityDistanceErrorMultiple(0.025);
     pointMatcher->Update();
     if (!pointMatcher->IsMatchingWithinTolerance())
     {
       std::stringstream msg;
       msg << "Could not find a good mapping." << std::endl
-        << "Mean squared distance error was " << pointMatcher->GetComputedRootMeanSquareDistanceErrorMm()
-        << ", but tolerance is " << pointMatcher->GetTolerableRootMeanSquareDistanceErrorMm() << "." << std::endl
+        << "Mean squared distance error was " << pointMatcher->GetComputedDistanceError()
+        << ", but tolerance is " << pointMatcher->GetTolerableDistanceError() << "." << std::endl
         << "Results are not expected to be accurate.";
       fiducialRegistrationWizardNode->AddToCalibrationStatusMessage(msg.str());
     }
@@ -323,8 +326,8 @@ bool vtkSlicerFiducialRegistrationWizardLogic::UpdateCalibration(vtkMRMLNode* no
         << "Results are not necessarily expected to be accurate.";
       fiducialRegistrationWizardNode->AddToCalibrationStatusMessage(msg.str());
     }
-    fromPointsOrdered = pointMatcher->GetOutputPointList1();
-    toPointsOrdered = pointMatcher->GetOutputPointList2();
+    fromPointsOrdered = pointMatcher->GetOutputSourcePoints();
+    toPointsOrdered = pointMatcher->GetOutputTargetPoints();
   }
   else
   {
@@ -456,6 +459,11 @@ bool vtkSlicerFiducialRegistrationWizardLogic::UpdateCalibration(vtkMRMLNode* no
   double rmsError = this->CalculateRegistrationError(fromPointsOrdered, toPointsOrdered, outputTransform);
   completeMessage << "Registration Complete. RMS Error: " << rmsError;
   fiducialRegistrationWizardNode->AddToCalibrationStatusMessage(completeMessage.str());
+  fiducialRegistrationWizardNode->SetCalibrationError( rmsError );
+#if Slicer_VERSION_MAJOR >= 5 || (Slicer_VERSION_MAJOR >= 4 && Slicer_VERSION_MINOR >= 11)
+  outputTransformNode->AddNodeReferenceID(vtkMRMLTransformNode::GetMovingNodeReferenceRole(), fromMarkupsFiducialNode->GetID());
+  outputTransformNode->AddNodeReferenceID(vtkMRMLTransformNode::GetFixedNodeReferenceRole(), toMarkupsFiducialNode->GetID());
+#endif 
   return true;
 }
 

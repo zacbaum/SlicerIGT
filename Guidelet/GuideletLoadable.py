@@ -32,6 +32,9 @@ class GuideletWidget(ScriptedLoadableModuleWidget):
     self.guideletLogic = self.createGuideletLogic()
     self.selectedConfigurationName = 'Default'
 
+  def hideEvent(self, event):
+    self.preCleanup()
+
   def setup(self):
     ScriptedLoadableModuleWidget.setup(self)
 
@@ -119,12 +122,12 @@ class GuideletWidget(ScriptedLoadableModuleWidget):
     plusServerHostNamePort = settings.value(self.moduleName + '/Configurations/' + self.selectedConfigurationName + '/PlusServerHostNamePort')
     self.plusServerHostNamePortLineEdit.setText(plusServerHostNamePort)
 
-  def cleanup(self):
+  def preCleanup(self):
     self.launchGuideletButton.disconnect('clicked()', self.onLaunchGuideletButtonClicked)
     if self.guideletLogic:
-      self.guideletLogic.cleanup()
+      self.guideletLogic.preCleanup()
     if self.guideletInstance:
-      self.guideletInstance.cleanup()
+      self.guideletInstance.preCleanup()
 
   def onLaunchGuideletButtonClicked(self):
     logging.debug('onLaunchGuideletButtonClicked')
@@ -198,7 +201,7 @@ class GuideletLogic(ScriptedLoadableModuleLogic):
                    'UltrasoundBrightnessControl' : 'Buttons',
                    'RecordingEnabledWhenConnectorNodeDisconnected' : 'False',
                    'PLUSCaptureDeviceName' : 'CaptureDevice', # If '', no PLUS recordings are saved.
-                   'HasBorderInFullScreen' : 'False', # If True, allows certain Qt widgets to appear properly with Qt versions >= 5.
+                   'HasBorderInFullScreen' : 'True', # If True, allows certain Qt widgets to appear properly with Qt versions >= 5.
                    }
     self.updateSettings(settingList, 'Default')
 
@@ -231,19 +234,19 @@ class GuideletLogic(ScriptedLoadableModuleLogic):
 
   def writeTransformToSettings(self, transformName, transformMatrix, configurationName):
     transformMatrixArray = []
-    for r in xrange(4):
-      for c in xrange(4):
+    for r in range(4):
+      for c in range(4):
         transformMatrixArray.append(transformMatrix.GetElement(r,c))
-    transformMatrixString = ' '.join(map(str, transformMatrixArray)) # string, numbers are separated by spaces
+    transformMatrixString = ' '.join(list(map(str, transformMatrixArray))) # string, numbers are separated by spaces
     settings = slicer.app.userSettings()
     settingString = self.moduleName + '/Configurations/' + configurationName + '/{0}' # Write to selected configuration
     settings.setValue(settingString.format(transformName), transformMatrixString)
 
   def createMatrixFromString(self, transformMatrixString):
     transformMatrix = vtk.vtkMatrix4x4()
-    transformMatrixArray = map(float, transformMatrixString.split(' '))
-    for r in xrange(4):
-      for c in xrange(4):
+    transformMatrixArray = list(map(float, transformMatrixString.split(' ')))
+    for r in range(4):
+      for c in range(4):
         transformMatrix.SetElement(r,c, transformMatrixArray[r*4+c])
     return transformMatrix
 

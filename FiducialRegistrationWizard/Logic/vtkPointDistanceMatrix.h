@@ -24,29 +24,36 @@ class VTK_SLICER_FIDUCIALREGISTRATIONWIZARD_MODULE_LOGIC_EXPORT vtkPointDistance
     
     static vtkPointDistanceMatrix* New();
     
-    void SetPointList1( vtkPoints* points );
-    void SetPointList2( vtkPoints* points );
     vtkPoints* GetPointList1();
     vtkPoints* GetPointList2();
     double GetDistance( int list1Index, int list2Index );
-    double GetMinimumDistance();
-    void Update();
+    void GetDistances( vtkDoubleArray* outputArray );
+    vtkGetMacro( MaximumDistance, int );
+    vtkGetMacro( MinimumDistance, int );
 
-    // compute pair-wise difference between two point distance matrices.
-    // Store the result in a structure other than a point distance matrix
-    // because its contents are not regenerated.
-    static void ComputePairWiseDifferences( vtkPointDistanceMatrix* firstMatrix, vtkPointDistanceMatrix* secondMatrix, vtkDoubleArray* output );
+    void SetPointList1( vtkPoints* points );
+    void SetPointList2( vtkPoints* points );
+    
+    void Update();
 
   protected:
     vtkPointDistanceMatrix();
     ~vtkPointDistanceMatrix();
   private:
+    // inputs
     vtkPoints* PointList1;
     vtkPoints* PointList2;
-    vtkSmartPointer< vtkDoubleArray > DistanceMatrix;
 
+    // outputs
+    vtkSmartPointer< vtkDoubleArray > DistanceMatrix;
     vtkTimeStamp MatrixUpdateTime;
+    double MaximumDistance;
+    double MinimumDistance;
+
     bool UpdateNeeded();
+    bool InputsContainErrors( bool verbose=true );
+
+    void ResetDistances();
 
 		vtkPointDistanceMatrix(const vtkPointDistanceMatrix&); // Not implemented.
 		void operator=(const vtkPointDistanceMatrix&); // Not implemented.

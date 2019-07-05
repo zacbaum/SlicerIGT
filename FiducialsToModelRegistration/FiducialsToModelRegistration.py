@@ -218,6 +218,9 @@ class FiducialsToModelRegistrationLogic(ScriptedLoadableModuleLogic):
     icpTransform.Update()
 
     outputTransform.SetMatrixTransformToParent( icpTransform.GetMatrix() )
+    if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion >= 4 and slicer.app.minorVersion >= 11):
+      outputTransform.AddNodeReferenceID(slicer.vtkMRMLTransformNode.GetMovingNodeReferenceRole(), inputFiducials.GetID())
+      outputTransform.AddNodeReferenceID(slicer.vtkMRMLTransformNode.GetFixedNodeReferenceRole(), inputModel.GetID())
 
     return True
 
@@ -241,7 +244,7 @@ class FiducialsToModelRegistrationLogic(ScriptedLoadableModuleLogic):
       transformedPoint = [0, 0, 0, 1]
       #transform.GetTransformToParent().TransformVector( originalPoint, transformedPoint )
       originalPoint.append(1)
-      transform.GetTransformToParent().MultiplyPoint( originalPoint, transformedPoint )      
+      transform.GetTransformToParent().MultiplyPoint( originalPoint, transformedPoint )
       #transformedPoints.InsertNextPoint( transformedPoint )
       surfacePoint = [0, 0, 0]
       transformedPoint.pop()

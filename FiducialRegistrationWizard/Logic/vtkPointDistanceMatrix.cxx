@@ -13,6 +13,8 @@ vtkPointDistanceMatrix::vtkPointDistanceMatrix()
   this->PointList1 = NULL;
   this->PointList2 = NULL;
   this->DistanceMatrix = vtkSmartPointer< vtkDoubleArray >::New();
+  this->MaximumDistance = VTK_DOUBLE_MIN;
+  this->MinimumDistance = VTK_DOUBLE_MAX;
 }
 
 //------------------------------------------------------------------------------
@@ -40,108 +42,97 @@ double vtkPointDistanceMatrix::GetDistance( int pointList1Index, int pointList2I
     Update();
   }
 
-  if ( this->PointList1 == NULL )
+  if ( this->DistanceMatrix->GetNumberOfTuples() == 0 )
   {
-    vtkWarningMacro( "Point list 1 is null. Returning 0." )
+    vtkWarningMacro( "Matrix has no contents. Returning 0." )
     return 0.0;
   }
 
-  int pointList1Length = this->PointList1->GetNumberOfPoints();
-  if ( pointList1Index >= pointList1Length )
+  int tupleIndex = pointList1Index;
+  int numberOfTuples = this->DistanceMatrix->GetNumberOfTuples();
+  if ( tupleIndex < 0 || tupleIndex >= numberOfTuples )
   {
-    vtkWarningMacro( "Point of list 1 is outside the range. Returning 0." )
-    return 0.0;
-  }
-  
-  if ( this->PointList2 == NULL )
-  {
-    vtkWarningMacro( "Point list 2 is null. Returning 0." )
+    vtkWarningMacro( "Point index of first list " << tupleIndex << " is outside the range 0 to " << ( numberOfTuples - 1 ) << ". Returning 0." )
     return 0.0;
   }
 
-  int pointList2Length = this->PointList2->GetNumberOfPoints();
-  if ( pointList2Index >= pointList2Length )
+  int componentIndex = pointList2Index;
+  int numberOfComponents = this->DistanceMatrix->GetNumberOfComponents();
+  if ( componentIndex < 0 || componentIndex >= numberOfComponents )
   {
-    vtkWarningMacro( "Point of list 2 is outside the range. Returning 0." )
+    vtkWarningMacro( "Point index of secondList list " << componentIndex << " is outside the range 0 to " << ( numberOfComponents - 1 ) << ". Returning 0." )
     return 0.0;
   }
 
-  return this->DistanceMatrix->GetComponent( pointList1Index, pointList2Index );
+  return this->DistanceMatrix->GetComponent( tupleIndex, componentIndex );
 }
 
 //------------------------------------------------------------------------------
-double vtkPointDistanceMatrix::GetMinimumDistance()
+void vtkPointDistanceMatrix::GetDistances( vtkDoubleArray* outputArray )
 {
-  if ( UpdateNeeded()  )
+  if ( this->UpdateNeeded() )
   {
-    Update();
+    this->Update();
   }
 
-  if ( this->PointList1 == NULL )
+  if ( outputArray == NULL )
   {
-    vtkWarningMacro( "Point list 1 is null. Returning 0." )
-    return 0.0;
+    vtkWarningMacro( "Output distances array is null." );
+    return;
   }
-  int pointList1Length = this->PointList1->GetNumberOfPoints();
 
-  if ( this->PointList2 == NULL )
-  {
-    vtkWarningMacro( "Point list 2 is null. Returning 0." )
-    return 0.0;
-  }
-  int pointList2Length = this->PointList2->GetNumberOfPoints();
-  
   if ( this->DistanceMatrix->GetNumberOfTuples() == 0 )
   {
-    vtkGenericWarningMacro( "Matrix has no contents. Returning 0." )
-    return 0.0;
+    vtkWarningMacro( "Matrix has no contents." )
+    return;
   }
 
-  double minDistance = GetDistance( 0, 0 );
-  for ( int pointList1Index = 0; pointList1Index < pointList1Length; pointList1Index++ )
+  outputArray->Reset();
+  int numberOfTuples = this->DistanceMatrix->GetNumberOfTuples(); // aka point list 1 index
+  int numberOfComponents = this->DistanceMatrix->GetNumberOfComponents(); // aka point list 2 index
+  for ( int tupleIndex = 0; tupleIndex < numberOfTuples; tupleIndex++ )
   {
-    for ( int pointList2Index = 0; pointList2Index < pointList2Length; pointList2Index++ )
+    for ( int componentIndex = 0; componentIndex < numberOfComponents; componentIndex++ )
     {
-      double currentDistance = GetDistance( pointList1Index, pointList2Index );
-      if ( currentDistance < minDistance )
-      {
-        minDistance = currentDistance;
-      }
+      double currentDistance = this->DistanceMatrix->GetComponent( tupleIndex, componentIndex );
+      outputArray->InsertNextTuple1( currentDistance );
     }
   }
-  return minDistance;
 }
 
 //------------------------------------------------------------------------------
 void vtkPointDistanceMatrix::SetPointList1( vtkPoints* points )
 {
   this->PointList1 = points;
+  this->ResetDistances();
 }
 
 //------------------------------------------------------------------------------
 void vtkPointDistanceMatrix::SetPointList2( vtkPoints* points )
 {
   this->PointList2 = points ;
+  this->ResetDistances();
+}
+
+//------------------------------------------------------------------------------
+void vtkPointDistanceMatrix::ResetDistances()
+{
+  this->DistanceMatrix->Reset();
+  this->MaximumDistance = VTK_DOUBLE_MIN;
+  this->MinimumDistance = VTK_DOUBLE_MAX;
 }
 
 //------------------------------------------------------------------------------
 void vtkPointDistanceMatrix::Update()
 {
-  
-  if ( this->PointList2 == NULL )
+  if ( this->InputsContainErrors() )
   {
-    vtkWarningMacro( "Point list 2 is null. Cannot update." )
+    vtkWarningMacro( "Cannot update." )
     return;
   }
+
   int pointList2Length = this->PointList2->GetNumberOfPoints();
   this->DistanceMatrix->SetNumberOfComponents( pointList2Length );
-  // (number of components must be set before number of tuples)
-
-  if ( this->PointList1 == NULL )
-  {
-    vtkWarningMacro( "Point list 1 is null. Cannot update." )
-    return;
-  }
   int pointList1Length = this->PointList1->GetNumberOfPoints();
   this->DistanceMatrix->SetNumberOfTuples( pointList1Length );
 
@@ -156,6 +147,14 @@ void vtkPointDistanceMatrix::Update()
       double distanceSquared = vtkMath::Distance2BetweenPoints( pointInList1, pointInList2 );
       double distance = sqrt( distanceSquared );
       this->DistanceMatrix->SetComponent( pointList1Index, pointList2Index, distance );
+      if ( distance > this->MaximumDistance )
+      {
+        this->MaximumDistance = distance;
+      }
+      if ( distance < this->MinimumDistance )
+      {
+        this->MinimumDistance = distance;
+      }
     }
   }
 
@@ -180,86 +179,47 @@ bool vtkPointDistanceMatrix::UpdateNeeded()
 }
 
 //------------------------------------------------------------------------------
-void vtkPointDistanceMatrix::ComputePairWiseDifferences( vtkPointDistanceMatrix* matrix1, vtkPointDistanceMatrix* matrix2, vtkDoubleArray* outputArray )
+bool vtkPointDistanceMatrix::InputsContainErrors( bool verbose )
 {
-  if ( matrix1 == NULL )
+  if ( this->PointList1 == NULL )
   {
-    vtkGenericWarningMacro( "Input first matrix is null. No differences computed." );
-    return;
-  }
-  
-  vtkPoints* matrix1PointList1 = matrix1->GetPointList1();
-  if ( matrix1PointList1 == NULL )
-  {
-    vtkGenericWarningMacro( "Point list 1 from matrix 1 is null. No differences computed." );
-    return;
-  }
-
-  vtkPoints* matrix1PointList2 = matrix1->GetPointList2();
-  if ( matrix1PointList2 == NULL )
-  {
-    vtkGenericWarningMacro( "Point list 2 from matrix 1 is null. No differences computed." );
-    return;
-  }
-
-  if ( matrix2 == NULL )
-  {
-    vtkGenericWarningMacro( "Input second matrix is null. No differences computed." );
-    return;
-  }
-
-  vtkPoints* matrix2PointList1 = matrix2->GetPointList1();
-  if ( matrix2PointList1 == NULL )
-  {
-    vtkGenericWarningMacro( "Point list 1 from matrix 2 is null. No differences computed." );
-    return;
-  }
-
-  vtkPoints* matrix2PointList2 = matrix2->GetPointList2();
-  if ( matrix2PointList2 == NULL )
-  {
-    vtkGenericWarningMacro( "Point list 2 from matrix 2 is null. No differences computed." );
-    return;
-  }
-
-  if ( matrix1PointList1->GetNumberOfPoints() != matrix2PointList1->GetNumberOfPoints() )
-  {
-    vtkGenericWarningMacro( "Input matrices have different numbers of points for first list. Cannot compute pair-wise differences." );
-    return;
-  }
-
-  if ( matrix1PointList2->GetNumberOfPoints() != matrix2PointList2->GetNumberOfPoints() )
-  {
-    vtkGenericWarningMacro( "Input matrices have different numbers of points for second list. Cannot compute pair-wise differences." );
-    return;
-  }
-
-  if ( outputArray == NULL )
-  {
-    vtkGenericWarningMacro( "Output matrix is null. Cannot compute pair-wise differences." );
-    return;
-  }
-
-  if ( outputArray->GetNumberOfTuples() > 0 )
-  {
-    vtkGenericWarningMacro( "Output array is not empty. Emptying contents" );
-    outputArray->Reset();
-  }
-
-  int pointList1Length = matrix1PointList1->GetNumberOfPoints();
-  int pointList2Length = matrix1PointList2->GetNumberOfPoints();
-  outputArray->SetNumberOfComponents( pointList2Length );
-  outputArray->SetNumberOfTuples( pointList1Length );
-  for ( int pointList1Index = 0; pointList1Index < pointList1Length; pointList1Index++ )
-  {
-    for ( int pointList2Index = 0; pointList2Index < pointList2Length; pointList2Index++ )
+    if ( verbose )
     {
-      double distanceFromMatrix1 = matrix1->GetDistance( pointList1Index, pointList2Index );
-      double distanceFromMatrix2 = matrix2->GetDistance( pointList1Index, pointList2Index );
-      double differenceOfDistances = distanceFromMatrix2 - distanceFromMatrix1;
-      outputArray->SetComponent( pointList1Index, pointList2Index, differenceOfDistances );
+      vtkWarningMacro( "Point list 1 is null." );
     }
+    return true;
   }
+
+  int numberOfPointsInList1 = this->PointList1->GetNumberOfPoints();
+  if ( numberOfPointsInList1 == 0 )
+  {
+    if ( verbose )
+    {
+      vtkWarningMacro( "There are no points in list 1.");
+    }
+    return true;
+  }
+
+  if ( this->PointList2 == NULL )
+  {
+    if ( verbose )
+    {
+      vtkWarningMacro( "Point list 2 is null." );
+    }
+    return true;
+  }
+
+  int numberOfPointsInList2 = this->PointList2->GetNumberOfPoints();
+  if ( numberOfPointsInList2 == 0 )
+  {
+    if ( verbose )
+    {
+      vtkWarningMacro( "There are no points in list 2.");
+    }
+    return true;
+  }
+
+  return false;
 }
 
 //------------------------------------------------------------------------------
